@@ -64,3 +64,18 @@ The app starts with these default roles when a new user opens it (or after Reset
 - Generate Demo Officials creates placeholder officials to satisfy role counts where needed.
 - Reset to Default Settings clears matches, officials, and generated schedules, then restores default roles.
 - If generation fails, adjust constraints (more officials, fewer slots, or availability updates).
+
+## GitHub Pages URL at /RollerDerbyScheduler/
+
+This project is configured to deploy to the user-site repository path:
+
+https://jollars.github.io/RollerDerbyScheduler/
+
+Required one-time setup:
+
+1. Create repository JOllars.github.io on GitHub (public).
+2. In JOllars.github.io repository settings, enable GitHub Pages from branch main and root folder.
+3. In PrivatePublicStuff repository settings, add secret DEPLOY_TO_USER_SITE_TOKEN.
+4. The secret token must be a GitHub PAT with repo scope and access to JOllars.github.io.
+
+After this, every push to main in PrivatePublicStuff auto-deploys the RollerDerbyScheduler folder to /RollerDerbyScheduler/.

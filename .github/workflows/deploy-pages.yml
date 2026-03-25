@@ -1,4 +1,4 @@
-name: Deploy to GitHub Pages
+name: Deploy to JOllars.github.io
 
 on:
   push:
@@ -7,31 +7,25 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: "pages"
+  group: "user-site-deploy"
   cancel-in-progress: true
 
 jobs:
   deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Deploy folder to user site
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: RollerDerbyScheduler
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          personal_token: ${{ secrets.DEPLOY_TO_USER_SITE_TOKEN }}
+          external_repository: JOllars/JOllars.github.io
+          publish_branch: main
+          publish_dir: ./RollerDerbyScheduler
+          destination_dir: RollerDerbyScheduler
+          keep_files: true
+          commit_message: "Deploy RollerDerbyScheduler from PrivatePublicStuff"
