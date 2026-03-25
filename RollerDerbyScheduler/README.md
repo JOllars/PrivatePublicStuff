@@ -2,6 +2,18 @@
 
 A standalone browser-based scheduler for flat track roller derby officiating.
 
+## Versioning
+
+- Current version: `1.00`
+- Default increment rule: increase by `0.01` for each update unless explicitly requested otherwise.
+- Keep this README updated with a per-version changelog entry whenever features or behavior change.
+
+## Version history
+
+### 1.00
+
+- Added an on-page version badge in the top-right corner so you can quickly confirm which build is loaded.
+
 ## What it does
 
 - Lets you add matches with date and time.

@@ -76,6 +76,22 @@
       align-items: center;
     }
 
+    .version-badge {
+      position: fixed;
+      top: 12px;
+      right: 16px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 250, 242, 0.95);
+      color: var(--ink-muted);
+      font-size: 0.84rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      box-shadow: var(--shadow);
+      z-index: 10;
+    }
+
     .card {
       grid-column: span 12;
       background: var(--panel);
@@ -316,6 +332,7 @@
   </style>
 </head>
 <body>
+  <div id="appVersion" class="version-badge" aria-label="Application version"></div>
   <main class="wrap">
     <h1>Flat Track Roller Derby Officials Scheduler</h1>
     <p class="sub">Manage one shared pool of officials and one shared role list. Officials can perform any selected roles (Ref, NSO, or mixed). Add match dates and generate complete schedules per day.</p>
@@ -404,6 +421,7 @@
   </main>
 
   <script>
+    const APP_VERSION = "1.00";
     const STORAGE_KEY = "rollerderby-official-scheduler-v3";
 
     const state = {
@@ -419,6 +437,7 @@
     };
 
     const el = {
+      appVersion: document.getElementById("appVersion"),
       downloadSiteBtn: document.getElementById("downloadSiteBtn"),
       matchDate: document.getElementById("matchDate"),
       matchTime: document.getElementById("matchTime"),
@@ -458,6 +477,8 @@
       status: document.getElementById("status"),
       scheduleOutput: document.getElementById("scheduleOutput")
     };
+
+    el.appVersion.textContent = "v" + APP_VERSION;
 
     function uid(prefix) {
       return prefix + "-" + Math.random().toString(36).slice(2, 9);
