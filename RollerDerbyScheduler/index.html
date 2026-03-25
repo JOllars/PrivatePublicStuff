@@ -386,6 +386,7 @@
           <div class="flow">
             <select id="scheduleDay"></select>
             <button id="generateBtn" class="secondary" type="button">Generate Schedule for Selected Day</button>
+            <button id="copyScheduleBtn" type="button">Copy Table for Excel</button>
             <button id="clearBtn" class="ghost" type="button">Clear Generated Schedule</button>
           </div>
         </div>
@@ -439,6 +440,7 @@
       importFile: document.getElementById("importFile"),
       scheduleDay: document.getElementById("scheduleDay"),
       generateBtn: document.getElementById("generateBtn"),
+      copyScheduleBtn: document.getElementById("copyScheduleBtn"),
       clearBtn: document.getElementById("clearBtn"),
       status: document.getElementById("status"),
       scheduleOutput: document.getElementById("scheduleOutput")
@@ -945,23 +947,114 @@
       const result = state.generated.result;
       const officialMap = new Map(state.officials.map((o) => [o.id, o.name]));
 
-      let html = '<p><strong>Day:</strong> ' + escapeHtml(day) + '</p>';
-      html += "<table><thead><tr><th>Match</th><th>Assignments</th></tr></thead><tbody>";
+      const matrix = new Map();
+      state.roles.forEach((role) => {
+        const perMatch = new Map();
+        matchIds.forEach((matchId) => {
+          perMatch.set(matchId, []);
+        });
+        matrix.set(role.id, perMatch);
+      });
 
       matchIds.forEach((matchId) => {
-        const matchName = getMatchName(matchId);
         const assignments = result[matchId] || [];
-        const lines = assignments.map((a) => {
-          const role = getRoleName(a.roleId);
-          const official = officialMap.get(a.officialId) || "Unknown official";
-          return "<div><strong>" + escapeHtml(role) + ":</strong> " + escapeHtml(official) + "</div>";
-        }).join("");
+        assignments.forEach((assignment) => {
+          const roleMap = matrix.get(assignment.roleId);
+          if (!roleMap) {
+            return;
+          }
+          const list = roleMap.get(matchId) || [];
+          const officialName = officialMap.get(assignment.officialId) || "Unknown official";
+          list.push(officialName);
+          roleMap.set(matchId, list);
+        });
+      });
 
-        html += "<tr><td>" + escapeHtml(matchName) + "</td><td>" + (lines || "-") + "</td></tr>";
+      let html = '<p><strong>Day:</strong> ' + escapeHtml(day) + '</p>';
+      html += "<table><thead><tr><th>Role</th>";
+      matchIds.forEach((matchId) => {
+        const match = state.matches.find((m) => m.id === matchId);
+        const header = match ? ((match.time ? match.time + " - " : "") + match.name) : "Unknown match";
+        html += "<th>" + escapeHtml(header) + "</th>";
+      });
+      html += "</tr></thead><tbody>";
+
+      state.roles.forEach((role) => {
+        html += "<tr><td><strong>" + escapeHtml(getRoleLabel(role)) + "</strong></td>";
+        const perMatch = matrix.get(role.id);
+        matchIds.forEach((matchId) => {
+          const names = (perMatch.get(matchId) || []).join(", ");
+          html += "<td>" + escapeHtml(names) + "</td>";
+        });
+        html += "</tr>";
       });
 
       html += "</tbody></table>";
       el.scheduleOutput.innerHTML = html;
+    }
+
+    function buildScheduleTsv() {
+      if (!state.generated) {
+        return "";
+      }
+
+      const matchIds = state.generated.matchOrder;
+      const result = state.generated.result;
+      const officialMap = new Map(state.officials.map((o) => [o.id, o.name]));
+      const matrix = new Map();
+
+      state.roles.forEach((role) => {
+        const perMatch = new Map();
+        matchIds.forEach((matchId) => {
+          perMatch.set(matchId, []);
+        });
+        matrix.set(role.id, perMatch);
+      });
+
+      matchIds.forEach((matchId) => {
+        const assignments = result[matchId] || [];
+        assignments.forEach((assignment) => {
+          const roleMap = matrix.get(assignment.roleId);
+          if (!roleMap) {
+            return;
+          }
+          const list = roleMap.get(matchId) || [];
+          list.push(officialMap.get(assignment.officialId) || "Unknown official");
+          roleMap.set(matchId, list);
+        });
+      });
+
+      const headers = ["Role"].concat(matchIds.map((matchId) => {
+        const match = state.matches.find((m) => m.id === matchId);
+        return match ? ((match.time ? match.time + " - " : "") + match.name) : "Unknown match";
+      }));
+
+      const lines = [headers.join("\t")];
+      state.roles.forEach((role) => {
+        const perMatch = matrix.get(role.id);
+        const row = [getRoleLabel(role)];
+        matchIds.forEach((matchId) => {
+          row.push((perMatch.get(matchId) || []).join(", "));
+        });
+        lines.push(row.join("\t"));
+      });
+
+      return lines.join("\n");
+    }
+
+    async function copyScheduleForExcel() {
+      if (!state.generated) {
+        setError("Generate a schedule before copying.");
+        return;
+      }
+
+      const tsv = buildScheduleTsv();
+      try {
+        await navigator.clipboard.writeText(tsv);
+        setOk("Schedule table copied. Paste directly into Excel.");
+      } catch (err) {
+        setError("Clipboard copy failed. Select the schedule table and copy manually.");
+      }
     }
 
     function getDayOverview() {
@@ -1501,6 +1594,7 @@
     el.clearOfficialsBtn.addEventListener("click", clearOfficials);
     el.generateDemoOfficialsBtn.addEventListener("click", generateDemoOfficials);
     el.resetDefaultsBtn.addEventListener("click", resetToDefaultSettings);
+    el.copyScheduleBtn.addEventListener("click", copyScheduleForExcel);
     el.importFile.addEventListener("change", async (event) => {
       const file = event.target.files && event.target.files[0];
       if (!file) {
