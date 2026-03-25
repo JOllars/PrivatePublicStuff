@@ -424,8 +424,34 @@
   </main>
 
   <script>
-    const APP_VERSION = "1.01";
+    const APP_VERSION = "1.02";
     const STORAGE_KEY = "rollerderby-official-scheduler-v3";
+
+    const DEMO_FIRST_NAMES = [
+      "Alex", "Avery", "Bailey", "Blair", "Brett", "Cameron", "Casey", "Charlie", "Corey", "Dakota",
+      "Dale", "Daryl", "Devin", "Drew", "Eden", "Elliot", "Emerson", "Finley", "Frankie", "Gale",
+      "Harley", "Hayden", "Indigo", "Jamie", "Jay", "Jesse", "Jordan", "Jules", "Kai", "Kendall",
+      "Kerry", "Lane", "Lee", "Logan", "Marlowe", "Morgan", "Noel", "Oakley", "Parker", "Payton",
+      "Quinn", "Rae", "Reese", "Remy", "Riley", "River", "Robin", "Rowan", "Sage", "Sam",
+      "Sawyer", "Shawn", "Skyler", "Stevie", "Sydney", "Taylor", "Terry", "Tobin", "Tracy", "Tyler",
+      "Val", "Wren", "Aidan", "Beau", "Caleb", "Damon", "Elias", "Felix", "Gavin", "Harris",
+      "Isaac", "Jonah", "Keaton", "Liam", "Mason", "Nolan", "Owen", "Preston", "Roman", "Spencer",
+      "Theo", "Victor", "Wyatt", "Zane", "Amelia", "Bianca", "Clara", "Delia", "Elise", "Freya",
+      "Greta", "Hazel", "Ivy", "Juniper", "Lena", "Mira", "Nora", "Piper", "Rosa", "Tessa"
+    ];
+
+    const DEMO_LAST_NAMES = [
+      "Anderson", "Baker", "Bennett", "Blake", "Brooks", "Carter", "Chandler", "Clark", "Coleman", "Cooper",
+      "Dawson", "Diaz", "Douglas", "Duncan", "Edwards", "Ellis", "Evans", "Fisher", "Fletcher", "Ford",
+      "Foster", "Garcia", "Gibson", "Graham", "Gray", "Green", "Griffin", "Hall", "Hamilton", "Harris",
+      "Hayes", "Henderson", "Hughes", "Hunter", "Irwin", "Jackson", "James", "Jenkins", "Johnson", "Jones",
+      "Keller", "Kennedy", "King", "Lane", "Lawson", "Lee", "Lewis", "Long", "Mason", "Miller",
+      "Mitchell", "Moore", "Morgan", "Morris", "Murphy", "Nelson", "Norris", "Parker", "Patterson", "Perry",
+      "Peterson", "Phillips", "Porter", "Powell", "Price", "Reed", "Reid", "Reyes", "Richardson", "Rivera",
+      "Roberts", "Robinson", "Ross", "Russell", "Sanders", "Scott", "Simmons", "Smith", "Spencer", "Stewart",
+      "Sullivan", "Taylor", "Thomas", "Thompson", "Torres", "Turner", "Walker", "Ward", "Watson", "West",
+      "White", "Williams", "Wilson", "Wright", "Young", "Zimmerman", "Austin", "Bishop", "Cruz", "Ramirez"
+    ];
 
     const state = {
       roles: [],
@@ -543,6 +569,59 @@
     function getRoleLabel(role) {
       const short = sanitizeShortName(role.shortName || "");
       return short ? role.name + " [" + short + "]" : role.name;
+    }
+
+    function randomInt(min, max) {
+      return min + Math.floor(Math.random() * (max - min + 1));
+    }
+
+    function pickRandomUnique(items, count) {
+      const pool = [...items];
+      for (let i = pool.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = pool[i];
+        pool[i] = pool[j];
+        pool[j] = tmp;
+      }
+      return pool.slice(0, count);
+    }
+
+    function pickDemoRoles(allRoleIds, requiredRoleId) {
+      const maxRoles = Math.min(4, allRoleIds.length);
+      const targetCount = randomInt(1, Math.max(1, maxRoles));
+      const roleSet = new Set();
+
+      if (requiredRoleId) {
+        roleSet.add(requiredRoleId);
+      }
+
+      const remaining = allRoleIds.filter((id) => !roleSet.has(id));
+      const need = Math.max(0, targetCount - roleSet.size);
+      pickRandomUnique(remaining, need).forEach((id) => roleSet.add(id));
+      return [...roleSet];
+    }
+
+    function buildUniqueDemoName(existingNamesLower) {
+      const maxAttempts = 800;
+      for (let i = 0; i < maxAttempts; i += 1) {
+        const first = DEMO_FIRST_NAMES[Math.floor(Math.random() * DEMO_FIRST_NAMES.length)];
+        const last = DEMO_LAST_NAMES[Math.floor(Math.random() * DEMO_LAST_NAMES.length)];
+        const full = first + " " + last;
+        const key = full.toLowerCase();
+        if (!existingNamesLower.has(key)) {
+          existingNamesLower.add(key);
+          return full;
+        }
+      }
+
+      let seq = 1;
+      let fallback = "Demo Official " + seq;
+      while (existingNamesLower.has(fallback.toLowerCase())) {
+        seq += 1;
+        fallback = "Demo Official " + seq;
+      }
+      existingNamesLower.add(fallback.toLowerCase());
+      return fallback;
     }
 
     function saveState() {
@@ -1547,50 +1626,69 @@
       }
 
       const created = [];
+      const allRoleIds = state.roles.map((r) => r.id);
       const existingNames = new Set(state.officials.map((o) => String(o.name || "").toLowerCase()));
-      const matches = state.matches;
 
+      const roleShortfall = new Map();
       state.roles.forEach((role) => {
         let minCandidates;
-        if (matches.length === 0) {
+        if (state.matches.length === 0) {
           minCandidates = state.officials.filter((o) => (o.roles || []).includes(role.id)).length;
         } else {
-          minCandidates = Math.min(...matches.map((match) => {
+          minCandidates = Math.min(...state.matches.map((match) => {
             return state.officials.filter((o) => {
               return (o.roles || []).includes(role.id) && !(o.unavailable || []).includes(match.id);
             }).length;
           }));
         }
-
-        const needed = Math.max(0, role.count - minCandidates);
-        if (needed <= 0) {
-          return;
-        }
-
-        const base = sanitizeShortName(role.shortName || "") || "ROLE";
-        let seq = 1;
-        for (let i = 0; i < needed; i += 1) {
-          let demoName = "Demo " + base + " " + seq;
-          while (existingNames.has(demoName.toLowerCase())) {
-            seq += 1;
-            demoName = "Demo " + base + " " + seq;
-          }
-          existingNames.add(demoName.toLowerCase());
-          seq += 1;
-
-          created.push({
-            id: uid("official"),
-            name: demoName,
-            roles: [role.id],
-            unavailable: [],
-            preferredRoleId: role.id
-          });
-        }
+        roleShortfall.set(role.id, Math.max(0, role.count - minCandidates));
       });
 
-      if (created.length === 0) {
-        setOk("No demo officials needed. Current officials already cover role counts.");
-        return;
+      function createDemoOfficial(requiredRoleId) {
+        const roles = pickDemoRoles(allRoleIds, requiredRoleId);
+        const preferredRoleId = Math.random() < 0.55 ? roles[Math.floor(Math.random() * roles.length)] : "";
+        const name = buildUniqueDemoName(existingNames);
+        const official = {
+          id: uid("official"),
+          name,
+          roles,
+          unavailable: [],
+          preferredRoleId
+        };
+        created.push(official);
+
+        roles.forEach((roleId) => {
+          const current = roleShortfall.get(roleId) || 0;
+          if (current > 0) {
+            roleShortfall.set(roleId, current - 1);
+          }
+        });
+      }
+
+      function getTotalShortfall() {
+        let total = 0;
+        roleShortfall.forEach((value) => {
+          total += value;
+        });
+        return total;
+      }
+
+      const initialShortfall = getTotalShortfall();
+
+      if (initialShortfall > 0) {
+        while (getTotalShortfall() > 0) {
+          const openRoles = state.roles
+            .map((role) => ({ roleId: role.id, needed: roleShortfall.get(role.id) || 0 }))
+            .filter((item) => item.needed > 0)
+            .sort((a, b) => b.needed - a.needed);
+
+          const requiredRoleId = openRoles.length > 0 ? openRoles[0].roleId : "";
+          createDemoOfficial(requiredRoleId);
+        }
+      } else {
+        for (let i = 0; i < 10; i += 1) {
+          createDemoOfficial("");
+        }
       }
 
       state.officials = state.officials.concat(created);
@@ -1598,7 +1696,11 @@
       saveState();
       resetStatus();
       renderAll();
-      setOk("Created " + created.length + " demo officials.");
+      if (initialShortfall > 0) {
+        setOk("Created " + created.length + " demo officials to reach minimum role coverage.");
+      } else {
+        setOk("Created 10 extra demo officials.");
+      }
     }
 
     function addMatch() {
