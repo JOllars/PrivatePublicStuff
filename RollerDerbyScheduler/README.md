@@ -4,7 +4,7 @@ A standalone browser-based scheduler for flat track roller derby officiating.
 
 ## Versioning
 
-- Current version: `1.02`
+- Current version: `1.03`
 - Default increment rule: increase by `0.01` for each update unless explicitly requested otherwise.
 - Keep this README updated with a per-version changelog entry whenever features or behavior change.
 
@@ -14,6 +14,12 @@ Version files to update on each release:
 - `version.json` -> `version`
 
 ## Version history
+
+### 1.03
+
+- Schedule generation now allows incomplete staffing: if not all slots can be filled, remaining slots are kept as `blank` instead of failing generation.
+- Generated schedule matrix now shows separate rows per role slot (for example `Outside Pack Ref #1`, `#2`, `#3`) instead of combining multiple officials in one cell.
+- Excel copy output now matches the per-slot row format and includes `blank` for unfilled slots.
 
 ### 1.02
 
@@ -96,6 +102,7 @@ The app starts with these default roles when a new user opens it (or after Reset
 - Existing v1 and v2 data is migrated automatically.
 - Preferred role is a tie-breaker only; break rotation and fairness are prioritized first.
 - Locked assignments are enforced during schedule generation.
+- If staffing is insufficient, generation still succeeds and leaves unfilled slots as `blank`.
 - If a role has a short name, it is shown in official role selection and preferred role dropdown.
 - Generate Demo Officials creates placeholder officials to satisfy role counts where needed.
 - Demo officials use mixed role profiles (1 to 4 roles) and mixed preferred-role usage.

@@ -424,7 +424,7 @@
   </main>
 
   <script>
-    const APP_VERSION = "1.02";
+    const APP_VERSION = "1.03";
     const STORAGE_KEY = "rollerderby-official-scheduler-v3";
 
     const DEMO_FIRST_NAMES = [
@@ -1114,7 +1114,11 @@
       state.roles.forEach((role) => {
         const perMatch = new Map();
         matchIds.forEach((matchId) => {
-          perMatch.set(matchId, []);
+          const bySlot = new Map();
+          for (let slotIndex = 0; slotIndex < role.count; slotIndex += 1) {
+            bySlot.set(slotIndex, "blank");
+          }
+          perMatch.set(matchId, bySlot);
         });
         matrix.set(role.id, perMatch);
       });
@@ -1126,10 +1130,15 @@
           if (!roleMap) {
             return;
           }
-          const list = roleMap.get(matchId) || [];
-          const officialName = officialMap.get(assignment.officialId) || "Unknown official";
-          list.push(officialName);
-          roleMap.set(matchId, list);
+          const bySlot = roleMap.get(matchId);
+          if (!bySlot) {
+            return;
+          }
+          const slotIndex = Number.isInteger(assignment.slotIndex) ? assignment.slotIndex : 0;
+          const officialName = assignment.officialId
+            ? (officialMap.get(assignment.officialId) || "Unknown official")
+            : "blank";
+          bySlot.set(slotIndex, officialName);
         });
       });
 
@@ -1143,13 +1152,16 @@
       html += "</tr></thead><tbody>";
 
       state.roles.forEach((role) => {
-        html += "<tr><td><strong>" + escapeHtml(getRoleLabel(role)) + "</strong></td>";
         const perMatch = matrix.get(role.id);
-        matchIds.forEach((matchId) => {
-          const names = (perMatch.get(matchId) || []).join(", ");
-          html += "<td>" + escapeHtml(names) + "</td>";
-        });
-        html += "</tr>";
+        for (let slotIndex = 0; slotIndex < role.count; slotIndex += 1) {
+          html += "<tr><td><strong>" + escapeHtml(getRoleLabel(role) + " #" + (slotIndex + 1)) + "</strong></td>";
+          matchIds.forEach((matchId) => {
+            const bySlot = perMatch.get(matchId);
+            const name = bySlot ? (bySlot.get(slotIndex) || "blank") : "blank";
+            html += "<td>" + escapeHtml(name) + "</td>";
+          });
+          html += "</tr>";
+        }
       });
 
       html += "</tbody></table>";
@@ -1169,7 +1181,11 @@
       state.roles.forEach((role) => {
         const perMatch = new Map();
         matchIds.forEach((matchId) => {
-          perMatch.set(matchId, []);
+          const bySlot = new Map();
+          for (let slotIndex = 0; slotIndex < role.count; slotIndex += 1) {
+            bySlot.set(slotIndex, "blank");
+          }
+          perMatch.set(matchId, bySlot);
         });
         matrix.set(role.id, perMatch);
       });
@@ -1181,9 +1197,15 @@
           if (!roleMap) {
             return;
           }
-          const list = roleMap.get(matchId) || [];
-          list.push(officialMap.get(assignment.officialId) || "Unknown official");
-          roleMap.set(matchId, list);
+          const bySlot = roleMap.get(matchId);
+          if (!bySlot) {
+            return;
+          }
+          const slotIndex = Number.isInteger(assignment.slotIndex) ? assignment.slotIndex : 0;
+          const officialName = assignment.officialId
+            ? (officialMap.get(assignment.officialId) || "Unknown official")
+            : "blank";
+          bySlot.set(slotIndex, officialName);
         });
       });
 
@@ -1195,11 +1217,14 @@
       const lines = [headers.join("\t")];
       state.roles.forEach((role) => {
         const perMatch = matrix.get(role.id);
-        const row = [getRoleLabel(role)];
-        matchIds.forEach((matchId) => {
-          row.push((perMatch.get(matchId) || []).join(", "));
-        });
-        lines.push(row.join("\t"));
+        for (let slotIndex = 0; slotIndex < role.count; slotIndex += 1) {
+          const row = [getRoleLabel(role) + " #" + (slotIndex + 1)];
+          matchIds.forEach((matchId) => {
+            const bySlot = perMatch.get(matchId);
+            row.push(bySlot ? (bySlot.get(slotIndex) || "blank") : "blank");
+          });
+          lines.push(row.join("\t"));
+        }
       });
 
       return lines.join("\n");
@@ -1781,6 +1806,7 @@
             slots.push({
               matchId: match.id,
               roleId: role.id,
+              slotIndex: i,
               key: match.id + "::" + role.id + "::" + i
             });
           }
@@ -1862,14 +1888,6 @@
         slotCandidates.set(slot.key, candidates);
       });
 
-      const impossible = slots.find((slot) => (slotCandidates.get(slot.key) || []).length === 0);
-      if (impossible) {
-        setError(
-          "No candidate available for role \"" + getRoleName(impossible.roleId) + "\" in match \"" + getMatchName(impossible.matchId) + "\"."
-        );
-        return;
-      }
-
       const remaining = [...slots].sort((a, b) => slotCandidates.get(a.key).length - slotCandidates.get(b.key).length);
       const assignments = new Map();
       const totalLoad = new Map(state.officials.map((o) => [o.id, 0]));
@@ -1902,7 +1920,6 @@
       }
 
       const unlockedSlots = remaining.filter((slot) => !assignments.has(slot.key));
-      let solved = false;
 
       function getBreakPenalty(officialId, matchId) {
         const targetIndex = matchIndexById.get(matchId);
@@ -1922,13 +1939,8 @@
         return penalty;
       }
 
-      function backtrack(index) {
-        if (index >= unlockedSlots.length) {
-          solved = true;
-          return true;
-        }
-
-        const slot = unlockedSlots[index];
+      // Greedy fill: keep constraints/fairness priorities, leave a slot blank when no valid candidate exists.
+      unlockedSlots.forEach((slot) => {
         const usedSet = usedPerMatch.get(slot.matchId);
         const candidateMeta = [...slotCandidates.get(slot.key)]
           .filter((officialId) => !usedSet.has(officialId))
@@ -1944,7 +1956,7 @@
           });
 
         if (candidateMeta.length === 0) {
-          return false;
+          return;
         }
 
         const zeroBreakExists = candidateMeta.some((c) => c.breakPenalty === 0);
@@ -1965,33 +1977,12 @@
           return a.name.localeCompare(b.name);
         });
 
-        const orderedCandidates = filteredMeta.map((c) => c.officialId);
-
-        for (const officialId of orderedCandidates) {
-          assignments.set(slot.key, officialId);
-          usedSet.add(officialId);
-          totalLoad.set(officialId, totalLoad.get(officialId) + 1);
-          assignedMatchIndexes.get(officialId).add(matchIndexById.get(slot.matchId));
-
-          if (backtrack(index + 1)) {
-            return true;
-          }
-
-          assignments.delete(slot.key);
-          usedSet.delete(officialId);
-          totalLoad.set(officialId, totalLoad.get(officialId) - 1);
-          assignedMatchIndexes.get(officialId).delete(matchIndexById.get(slot.matchId));
-        }
-
-        return false;
-      }
-
-      backtrack(0);
-
-      if (!solved) {
-        setError("Unable to build a complete schedule for " + day + ". Add more officials, reduce role counts, or adjust unavailability.");
-        return;
-      }
+        const chosen = filteredMeta[0];
+        assignments.set(slot.key, chosen.officialId);
+        usedSet.add(chosen.officialId);
+        totalLoad.set(chosen.officialId, totalLoad.get(chosen.officialId) + 1);
+        assignedMatchIndexes.get(chosen.officialId).add(matchIndexById.get(slot.matchId));
+      });
 
       const result = {};
       slots.forEach((slot) => {
@@ -1999,11 +1990,17 @@
         if (!result[slot.matchId]) {
           result[slot.matchId] = [];
         }
-        result[slot.matchId].push({ roleId: slot.roleId, officialId });
+        result[slot.matchId].push({ roleId: slot.roleId, officialId: officialId || "", slotIndex: slot.slotIndex });
       });
 
       Object.keys(result).forEach((matchId) => {
-        result[matchId].sort((a, b) => getRoleName(a.roleId).localeCompare(getRoleName(b.roleId)));
+        result[matchId].sort((a, b) => {
+          const byRole = getRoleName(a.roleId).localeCompare(getRoleName(b.roleId));
+          if (byRole !== 0) {
+            return byRole;
+          }
+          return (a.slotIndex || 0) - (b.slotIndex || 0);
+        });
       });
 
       state.generated = {
@@ -2015,8 +2012,14 @@
       saveState();
       renderSchedule();
 
-      const assignmentCount = Object.values(result).reduce((sum, items) => sum + items.length, 0);
-      setOk("Schedule generated for " + day + ". " + assignmentCount + " assignments filled.");
+      const totalSlots = slots.length;
+      const assignmentCount = [...assignments.values()].filter((id) => !!id).length;
+      const blankCount = Math.max(0, totalSlots - assignmentCount);
+      if (blankCount > 0) {
+        setOk("Schedule generated for " + day + ". " + assignmentCount + " slots filled, " + blankCount + " blank.");
+      } else {
+        setOk("Schedule generated for " + day + ". " + assignmentCount + " assignments filled.");
+      }
     }
 
     function clearGenerated() {
