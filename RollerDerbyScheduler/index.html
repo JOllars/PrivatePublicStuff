@@ -322,9 +322,11 @@
     <div class="top-actions">
       <button id="downloadSiteBtn" type="button">Download Site</button>
       <button id="exportBtn" type="button">Export Schedule JSON</button>
-      <button id="importBtn" class="ghost" type="button">Import Schedule JSON</button>
-      <button id="clearMatchesBtn" class="ghost" type="button">Clear Matches</button>
-      <button id="clearOfficialsBtn" class="ghost" type="button">Clear Officials</button>
+      <button id="importBtn" type="button">Import Schedule JSON</button>
+      <button id="clearMatchesBtn" type="button">Clear Matches</button>
+      <button id="clearOfficialsBtn" type="button">Clear Officials</button>
+      <button id="generateDemoOfficialsBtn" type="button">Generate Demo Officials</button>
+      <button id="resetDefaultsBtn" type="button">Reset to Default Settings</button>
       <input id="importFile" type="file" accept="application/json,.json" style="display: none;" />
     </div>
 
@@ -432,6 +434,8 @@
       importBtn: document.getElementById("importBtn"),
       clearMatchesBtn: document.getElementById("clearMatchesBtn"),
       clearOfficialsBtn: document.getElementById("clearOfficialsBtn"),
+      generateDemoOfficialsBtn: document.getElementById("generateDemoOfficialsBtn"),
+      resetDefaultsBtn: document.getElementById("resetDefaultsBtn"),
       importFile: document.getElementById("importFile"),
       scheduleDay: document.getElementById("scheduleDay"),
       generateBtn: document.getElementById("generateBtn"),
@@ -447,13 +451,15 @@
     function defaultRoles() {
       return [
         { id: uid("role"), name: "Head Ref", shortName: "HR", count: 1 },
-        { id: uid("role"), name: "Inside Pack Ref", shortName: "IPR", count: 2 },
-        { id: uid("role"), name: "Outside Pack Ref", shortName: "OPR", count: 2 },
-        { id: uid("role"), name: "Jam Ref", shortName: "JR", count: 2 },
-        { id: uid("role"), name: "Penalty Tracker", shortName: "PT", count: 1 },
-        { id: uid("role"), name: "Lineup Tracker", shortName: "LT", count: 2 },
+        { id: uid("role"), name: "Outside Pack Ref", shortName: "OPR", count: 3 },
+        { id: uid("role"), name: "Jammer Ref", shortName: "JR", count: 2 },
+        { id: uid("role"), name: "Inside Pack Ref", shortName: "IPR", count: 1 },
+        { id: uid("role"), name: "Penalty Box Timer", shortName: "PBT", count: 2 },
+        { id: uid("role"), name: "Penalty Box Manager", shortName: "PBM", count: 1 },
         { id: uid("role"), name: "Jam Timer", shortName: "JT", count: 1 },
-        { id: uid("role"), name: "Scorekeeper", shortName: "SK", count: 2 }
+        { id: uid("role"), name: "Score Board Operator", shortName: "SO", count: 1 },
+        { id: uid("role"), name: "Score Keeper", shortName: "SK", count: 2 },
+        { id: uid("role"), name: "Penalty Lineup Tracker", shortName: "PLT", count: 2 }
       ];
     }
 
@@ -1186,6 +1192,84 @@
       setOk("All officials cleared. Roles kept.");
     }
 
+    function resetToDefaultSettings() {
+      if (!window.confirm("Reset all data to default settings? This will remove all matches, officials, and generated schedules.")) {
+        return;
+      }
+
+      state.roles = defaultRoles();
+      state.matches = [];
+      state.officials = [];
+      state.generated = null;
+
+      clearOfficialForm();
+      saveState();
+      resetStatus();
+      renderAll();
+      setOk("Reset complete. Default roles restored and all other data cleared.");
+    }
+
+    function generateDemoOfficials() {
+      if (state.roles.length === 0) {
+        setError("Add at least one role before generating demo officials.");
+        return;
+      }
+
+      const created = [];
+      const existingNames = new Set(state.officials.map((o) => String(o.name || "").toLowerCase()));
+      const matches = state.matches;
+
+      state.roles.forEach((role) => {
+        let minCandidates;
+        if (matches.length === 0) {
+          minCandidates = state.officials.filter((o) => (o.roles || []).includes(role.id)).length;
+        } else {
+          minCandidates = Math.min(...matches.map((match) => {
+            return state.officials.filter((o) => {
+              return (o.roles || []).includes(role.id) && !(o.unavailable || []).includes(match.id);
+            }).length;
+          }));
+        }
+
+        const needed = Math.max(0, role.count - minCandidates);
+        if (needed <= 0) {
+          return;
+        }
+
+        const base = sanitizeShortName(role.shortName || "") || "ROLE";
+        let seq = 1;
+        for (let i = 0; i < needed; i += 1) {
+          let demoName = "Demo " + base + " " + seq;
+          while (existingNames.has(demoName.toLowerCase())) {
+            seq += 1;
+            demoName = "Demo " + base + " " + seq;
+          }
+          existingNames.add(demoName.toLowerCase());
+          seq += 1;
+
+          created.push({
+            id: uid("official"),
+            name: demoName,
+            roles: [role.id],
+            unavailable: [],
+            preferredRoleId: role.id
+          });
+        }
+      });
+
+      if (created.length === 0) {
+        setOk("No demo officials needed. Current officials already cover role counts.");
+        return;
+      }
+
+      state.officials = state.officials.concat(created);
+      invalidateGenerated();
+      saveState();
+      resetStatus();
+      renderAll();
+      setOk("Created " + created.length + " demo officials.");
+    }
+
     function addMatch() {
       const date = el.matchDate.value;
       const time = el.matchTime.value;
@@ -1415,6 +1499,8 @@
     el.importBtn.addEventListener("click", () => el.importFile.click());
     el.clearMatchesBtn.addEventListener("click", clearMatches);
     el.clearOfficialsBtn.addEventListener("click", clearOfficials);
+    el.generateDemoOfficialsBtn.addEventListener("click", generateDemoOfficials);
+    el.resetDefaultsBtn.addEventListener("click", resetToDefaultSettings);
     el.importFile.addEventListener("change", async (event) => {
       const file = event.target.files && event.target.files[0];
       if (!file) {
