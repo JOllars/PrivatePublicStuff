@@ -79,10 +79,17 @@
       align-items: center;
     }
 
-    .version-badge {
+    .version-panel {
       position: fixed;
       top: 12px;
       right: 16px;
+      z-index: 10;
+      width: min(360px, calc(100vw - 24px));
+    }
+
+    .version-badge {
+      display: inline-block;
+      text-decoration: none;
       padding: 6px 10px;
       border: 1px solid var(--line);
       border-radius: 999px;
@@ -92,7 +99,49 @@
       font-weight: 700;
       letter-spacing: 0.04em;
       box-shadow: var(--shadow);
-      z-index: 10;
+    }
+
+    .version-badge:hover {
+      color: var(--ink);
+    }
+
+    .whats-new-toggle {
+      margin-top: 6px;
+      background: #8a5a2a;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+    }
+
+    .whats-new-panel {
+      margin-top: 6px;
+      background: rgba(255, 250, 242, 0.98);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      box-shadow: var(--shadow);
+      padding: 10px;
+      max-height: 40vh;
+      overflow: auto;
+    }
+
+    .whats-new-entry + .whats-new-entry {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dashed var(--line);
+    }
+
+    .whats-new-version {
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .whats-new-panel ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .whats-new-panel li {
+      margin: 4px 0;
     }
 
     .card {
@@ -335,7 +384,13 @@
   </style>
 </head>
 <body>
-  <div id="appVersion" class="version-badge" aria-label="Application version"></div>
+  <div class="version-panel" aria-label="Version and update information">
+    <a id="appVersion" class="version-badge" href="README.md" target="_blank" rel="noopener noreferrer" aria-label="Open README in new tab"></a>
+    <button id="whatsNewToggleBtn" class="whats-new-toggle" type="button" aria-expanded="false" aria-controls="whatsNewPanel">What's New</button>
+    <div id="whatsNewPanel" class="whats-new-panel" hidden>
+      <div id="whatsNewContent" class="muted">Loading latest changes...</div>
+    </div>
+  </div>
   <main class="wrap">
     <h1>Flat Track Roller Derby Officials Scheduler</h1>
     <p class="sub">Manage one shared pool of officials and one shared role list. Officials can perform any selected roles (Ref, NSO, or mixed). Add match dates and generate complete schedules per day.</p>
@@ -424,7 +479,7 @@
   </main>
 
   <script>
-    const APP_VERSION = "1.03";
+    const APP_VERSION = "1.04";
     const STORAGE_KEY = "rollerderby-official-scheduler-v3";
 
     const DEMO_FIRST_NAMES = [
@@ -462,7 +517,8 @@
     };
 
     const ui = {
-      editingOfficialId: null
+      editingOfficialId: null,
+      whatsNewLoaded: false
     };
 
     const el = {
@@ -502,12 +558,114 @@
       lockOfficial: document.getElementById("lockOfficial"),
       addLockBtn: document.getElementById("addLockBtn"),
       lockedAssignmentsList: document.getElementById("lockedAssignmentsList"),
+      whatsNewToggleBtn: document.getElementById("whatsNewToggleBtn"),
+      whatsNewPanel: document.getElementById("whatsNewPanel"),
+      whatsNewContent: document.getElementById("whatsNewContent"),
       clearBtn: document.getElementById("clearBtn"),
       status: document.getElementById("status"),
       scheduleOutput: document.getElementById("scheduleOutput")
     };
 
     el.appVersion.textContent = "v" + APP_VERSION;
+
+    function parseLatestVersionEntriesFromReadme(markdown) {
+      const lines = String(markdown || "").split(/\r?\n/);
+      const entries = [];
+      let inVersionHistory = false;
+      let current = null;
+
+      for (let i = 0; i < lines.length; i += 1) {
+        const line = lines[i];
+        const trimmed = line.trim();
+
+        if (!inVersionHistory) {
+          if (/^##\s+Version history\s*$/i.test(trimmed)) {
+            inVersionHistory = true;
+          }
+          continue;
+        }
+
+        if (/^##\s+/.test(trimmed) && !/^##\s+Version history\s*$/i.test(trimmed)) {
+          break;
+        }
+
+        const headerMatch = line.match(/^###\s+(.+)$/);
+        if (headerMatch) {
+          if (current) {
+            entries.push(current);
+          }
+          current = { version: headerMatch[1].trim(), bullets: [] };
+          continue;
+        }
+
+        if (!current) {
+          continue;
+        }
+
+        const bulletMatch = line.match(/^\-\s+(.+)$/);
+        if (bulletMatch) {
+          current.bullets.push(bulletMatch[1].trim());
+        }
+      }
+
+      if (current) {
+        entries.push(current);
+      }
+
+      return entries.slice(0, 2);
+    }
+
+    function renderWhatsNewFromReadme(entries) {
+      if (!entries.length) {
+        el.whatsNewContent.innerHTML = '<p class="muted">No version history entries found in README.</p>';
+        return;
+      }
+
+      let html = "";
+      entries.forEach((entry) => {
+        html += '<div class="whats-new-entry">';
+        html += '<div class="whats-new-version">v' + escapeHtml(entry.version) + "</div>";
+        if (!entry.bullets.length) {
+          html += '<p class="muted">No listed changes.</p>';
+        } else {
+          html += "<ul>";
+          entry.bullets.forEach((item) => {
+            html += "<li>" + escapeHtml(item) + "</li>";
+          });
+          html += "</ul>";
+        }
+        html += "</div>";
+      });
+
+      el.whatsNewContent.innerHTML = html;
+    }
+
+    function loadWhatsNew() {
+      return fetch("README.md?_=" + Date.now(), { cache: "no-store" })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error("README could not be loaded.");
+          }
+          return response.text();
+        })
+        .then((markdown) => {
+          const entries = parseLatestVersionEntriesFromReadme(markdown);
+          renderWhatsNewFromReadme(entries);
+          ui.whatsNewLoaded = true;
+        })
+        .catch(() => {
+          el.whatsNewContent.innerHTML = '<p class="muted">Could not load README changelog in this environment.</p>';
+        });
+    }
+
+    function toggleWhatsNewPanel() {
+      const isOpen = !el.whatsNewPanel.hidden;
+      el.whatsNewPanel.hidden = isOpen;
+      el.whatsNewToggleBtn.setAttribute("aria-expanded", String(!isOpen));
+      if (!isOpen && !ui.whatsNewLoaded) {
+        loadWhatsNew();
+      }
+    }
 
     function checkForNewVersionAndRefresh() {
       fetch("version.json?_=" + Date.now(), { cache: "no-store" })
@@ -569,6 +727,11 @@
     function getRoleLabel(role) {
       const short = sanitizeShortName(role.shortName || "");
       return short ? role.name + " [" + short + "]" : role.name;
+    }
+
+    function getScheduleRoleShortLabel(role) {
+      const short = sanitizeShortName(role.shortName || "");
+      return short || " ";
     }
 
     function randomInt(min, max) {
@@ -1116,7 +1279,7 @@
         matchIds.forEach((matchId) => {
           const bySlot = new Map();
           for (let slotIndex = 0; slotIndex < role.count; slotIndex += 1) {
-            bySlot.set(slotIndex, "blank");
+            bySlot.set(slotIndex, "");
           }
           perMatch.set(matchId, bySlot);
         });
@@ -1137,7 +1300,7 @@
           const slotIndex = Number.isInteger(assignment.slotIndex) ? assignment.slotIndex : 0;
           const officialName = assignment.officialId
             ? (officialMap.get(assignment.officialId) || "Unknown official")
-            : "blank";
+            : "";
           bySlot.set(slotIndex, officialName);
         });
       });
@@ -1154,11 +1317,11 @@
       state.roles.forEach((role) => {
         const perMatch = matrix.get(role.id);
         for (let slotIndex = 0; slotIndex < role.count; slotIndex += 1) {
-          html += "<tr><td><strong>" + escapeHtml(getRoleLabel(role) + " #" + (slotIndex + 1)) + "</strong></td>";
+          html += "<tr><td><strong>" + escapeHtml(getScheduleRoleShortLabel(role)) + "</strong></td>";
           matchIds.forEach((matchId) => {
             const bySlot = perMatch.get(matchId);
-            const name = bySlot ? (bySlot.get(slotIndex) || "blank") : "blank";
-            html += "<td>" + escapeHtml(name) + "</td>";
+            const name = bySlot ? (bySlot.get(slotIndex) || "") : "";
+            html += "<td>" + (name ? escapeHtml(name) : "&nbsp;") + "</td>";
           });
           html += "</tr>";
         }
@@ -1183,7 +1346,7 @@
         matchIds.forEach((matchId) => {
           const bySlot = new Map();
           for (let slotIndex = 0; slotIndex < role.count; slotIndex += 1) {
-            bySlot.set(slotIndex, "blank");
+            bySlot.set(slotIndex, "");
           }
           perMatch.set(matchId, bySlot);
         });
@@ -1204,7 +1367,7 @@
           const slotIndex = Number.isInteger(assignment.slotIndex) ? assignment.slotIndex : 0;
           const officialName = assignment.officialId
             ? (officialMap.get(assignment.officialId) || "Unknown official")
-            : "blank";
+            : "";
           bySlot.set(slotIndex, officialName);
         });
       });
@@ -1218,10 +1381,10 @@
       state.roles.forEach((role) => {
         const perMatch = matrix.get(role.id);
         for (let slotIndex = 0; slotIndex < role.count; slotIndex += 1) {
-          const row = [getRoleLabel(role) + " #" + (slotIndex + 1)];
+          const row = [getScheduleRoleShortLabel(role)];
           matchIds.forEach((matchId) => {
             const bySlot = perMatch.get(matchId);
-            row.push(bySlot ? (bySlot.get(slotIndex) || "blank") : "blank");
+            row.push(bySlot ? (bySlot.get(slotIndex) || " ") : " ");
           });
           lines.push(row.join("\t"));
         }
@@ -2042,6 +2205,7 @@
     el.resetDefaultsBtn.addEventListener("click", resetToDefaultSettings);
     el.copyScheduleBtn.addEventListener("click", copyScheduleForExcel);
     el.addLockBtn.addEventListener("click", addLockedAssignment);
+    el.whatsNewToggleBtn.addEventListener("click", toggleWhatsNewPanel);
     el.importFile.addEventListener("change", async (event) => {
       const file = event.target.files && event.target.files[0];
       if (!file) {

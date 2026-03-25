@@ -4,7 +4,7 @@ A standalone browser-based scheduler for flat track roller derby officiating.
 
 ## Versioning
 
-- Current version: `1.03`
+- Current version: `1.04`
 - Default increment rule: increase by `0.01` for each update unless explicitly requested otherwise.
 - Keep this README updated with a per-version changelog entry whenever features or behavior change.
 
@@ -14,6 +14,14 @@ Version files to update on each release:
 - `version.json` -> `version`
 
 ## Version history
+
+### 1.04
+
+- In generated schedule tables, role rows now show only each role short name (no `#1/#2/#3` suffixes).
+- Unassigned schedule slots are now displayed as empty cells instead of the text `blank`.
+- Excel copy output now leaves unassigned slots as empty-space cells instead of the text `blank`.
+- Added a top-right `What's New` toggle that expands/collapses latest changes pulled from the two newest README version entries.
+- Clicking the top-right version label now opens `README.md` in a new tab.
 
 ### 1.03
 
@@ -103,6 +111,7 @@ The app starts with these default roles when a new user opens it (or after Reset
 - Preferred role is a tie-breaker only; break rotation and fairness are prioritized first.
 - Locked assignments are enforced during schedule generation.
 - If staffing is insufficient, generation still succeeds and leaves unfilled slots as `blank`.
+- Unfilled slots are displayed as empty cells in the schedule table and export.
 - If a role has a short name, it is shown in official role selection and preferred role dropdown.
 - Generate Demo Officials creates placeholder officials to satisfy role counts where needed.
 - Demo officials use mixed role profiles (1 to 4 roles) and mixed preferred-role usage.
