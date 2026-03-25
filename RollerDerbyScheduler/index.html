@@ -479,7 +479,7 @@
   </main>
 
   <script>
-    const APP_VERSION = "1.05";
+    const APP_VERSION = "1.06";
     const STORAGE_KEY = "rollerderby-official-scheduler-v3";
 
     const DEMO_FIRST_NAMES = [
@@ -1416,6 +1416,8 @@
 
     function renderLockedAssignments() {
       const orderedMatches = [...state.matches].sort(byMatchOrder);
+      const prevMatchId = el.lockMatch.value;
+      const prevRoleId = el.lockRole.value;
 
       el.lockMatch.innerHTML = "";
       if (orderedMatches.length === 0) {
@@ -1430,6 +1432,9 @@
           opt.textContent = formatMatchLabel(match);
           el.lockMatch.appendChild(opt);
         });
+        if (orderedMatches.some((match) => match.id === prevMatchId)) {
+          el.lockMatch.value = prevMatchId;
+        }
       }
 
       el.lockRole.innerHTML = "";
@@ -1445,24 +1450,14 @@
           opt.textContent = getRoleLabel(role);
           el.lockRole.appendChild(opt);
         });
+        if (state.roles.some((role) => role.id === prevRoleId)) {
+          el.lockRole.value = prevRoleId;
+        }
       }
 
-      el.lockOfficial.innerHTML = "";
-      if (state.officials.length === 0) {
-        const opt = document.createElement("option");
-        opt.value = "";
-        opt.textContent = "No officials";
-        el.lockOfficial.appendChild(opt);
-      } else {
-        state.officials.forEach((official) => {
-          const opt = document.createElement("option");
-          opt.value = official.id;
-          opt.textContent = official.name;
-          el.lockOfficial.appendChild(opt);
-        });
-      }
+      renderLockOfficialOptions();
 
-      el.addLockBtn.disabled = !(orderedMatches.length && state.roles.length && state.officials.length);
+      el.addLockBtn.disabled = !(orderedMatches.length && state.roles.length && el.lockOfficial.value);
 
       el.lockedAssignmentsList.innerHTML = "";
       if (state.lockedAssignments.length === 0) {
@@ -1506,6 +1501,39 @@
         row.appendChild(removeBtn);
         el.lockedAssignmentsList.appendChild(row);
       });
+    }
+
+    function renderLockOfficialOptions() {
+      const selectedRoleId = el.lockRole.value;
+      const prevOfficialId = el.lockOfficial.value;
+
+      const eligibleOfficials = state.officials
+        .filter((official) => {
+          if (!selectedRoleId) {
+            return false;
+          }
+          return (official.roles || []).includes(selectedRoleId);
+        })
+        .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+
+      el.lockOfficial.innerHTML = "";
+      if (eligibleOfficials.length === 0) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "No officials for selected role";
+        el.lockOfficial.appendChild(opt);
+      } else {
+        eligibleOfficials.forEach((official) => {
+          const opt = document.createElement("option");
+          opt.value = official.id;
+          opt.textContent = official.name;
+          el.lockOfficial.appendChild(opt);
+        });
+
+        if (eligibleOfficials.some((official) => official.id === prevOfficialId)) {
+          el.lockOfficial.value = prevOfficialId;
+        }
+      }
     }
 
     function addLockedAssignment() {
@@ -1607,7 +1635,7 @@
         state.roles.forEach((role) => {
           html += "<th>" + escapeHtml(getRoleShortOnly(role)) + "</th>";
         });
-        html += "<th>Total Available</th></tr></thead><tbody>";
+        html += "<th>Total Available Officials</th></tr></thead><tbody>";
 
         dayBlock.games.forEach((game) => {
           html += "<tr><td>" + escapeHtml(game.matchLabel) + "</td>";
@@ -2209,6 +2237,13 @@
     el.resetDefaultsBtn.addEventListener("click", resetToDefaultSettings);
     el.copyScheduleBtn.addEventListener("click", copyScheduleForExcel);
     el.addLockBtn.addEventListener("click", addLockedAssignment);
+    el.lockRole.addEventListener("change", () => {
+      renderLockOfficialOptions();
+      el.addLockBtn.disabled = !(el.lockMatch.value && el.lockRole.value && el.lockOfficial.value);
+    });
+    el.lockMatch.addEventListener("change", () => {
+      el.addLockBtn.disabled = !(el.lockMatch.value && el.lockRole.value && el.lockOfficial.value);
+    });
     el.whatsNewToggleBtn.addEventListener("click", toggleWhatsNewPanel);
     el.importFile.addEventListener("change", async (event) => {
       const file = event.target.files && event.target.files[0];

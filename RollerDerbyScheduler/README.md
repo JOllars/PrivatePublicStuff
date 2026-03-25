@@ -4,7 +4,7 @@ A standalone browser-based scheduler for flat track roller derby officiating.
 
 ## Versioning
 
-- Current version: `1.05`
+- Current version: `1.06`
 - Default increment rule: increase by `0.01` for each update unless explicitly requested otherwise.
 - Keep this README updated with a per-version changelog entry whenever features or behavior change.
 
@@ -14,6 +14,11 @@ Version files to update on each release:
 - `version.json` -> `version`
 
 ## Version history
+
+### 1.06
+
+- Updated lock assignment flow so the official dropdown now only shows officials who can perform the currently selected role.
+- Updated Day Overview last column label from `Total Available` to `Total Available Officials`.
 
 ### 1.05
 
