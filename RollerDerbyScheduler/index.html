@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>Flat Track Roller Derby Officials Scheduler</title>
   <style>
     :root {
@@ -421,7 +424,7 @@
   </main>
 
   <script>
-    const APP_VERSION = "1.00";
+    const APP_VERSION = "1.01";
     const STORAGE_KEY = "rollerderby-official-scheduler-v3";
 
     const state = {
@@ -479,6 +482,36 @@
     };
 
     el.appVersion.textContent = "v" + APP_VERSION;
+
+    function checkForNewVersionAndRefresh() {
+      fetch("version.json?_=" + Date.now(), { cache: "no-store" })
+        .then((response) => {
+          if (!response.ok) {
+            return null;
+          }
+          return response.json();
+        })
+        .then((manifest) => {
+          const latestVersion = String(manifest?.version || "").trim();
+          if (!latestVersion || latestVersion === APP_VERSION) {
+            return;
+          }
+
+          const refreshGuardKey = "rollerderby-version-refresh-" + latestVersion;
+          if (sessionStorage.getItem(refreshGuardKey) === "1") {
+            return;
+          }
+          sessionStorage.setItem(refreshGuardKey, "1");
+
+          const url = new URL(window.location.href);
+          url.searchParams.set("v", latestVersion);
+          url.searchParams.set("cb", Date.now().toString());
+          window.location.replace(url.toString());
+        })
+        .catch(() => {
+          // Ignore version-check errors so scheduler usage is never blocked.
+        });
+    }
 
     function uid(prefix) {
       return prefix + "-" + Math.random().toString(36).slice(2, 9);
@@ -1919,6 +1952,7 @@
     el.generateBtn.addEventListener("click", generateScheduleForDay);
     el.clearBtn.addEventListener("click", clearGenerated);
 
+    checkForNewVersionAndRefresh();
     loadState();
     clearOfficialForm();
     renderAll();

@@ -4,11 +4,21 @@ A standalone browser-based scheduler for flat track roller derby officiating.
 
 ## Versioning
 
-- Current version: `1.00`
+- Current version: `1.01`
 - Default increment rule: increase by `0.01` for each update unless explicitly requested otherwise.
 - Keep this README updated with a per-version changelog entry whenever features or behavior change.
 
+Version files to update on each release:
+
+- `index.html` -> `APP_VERSION`
+- `version.json` -> `version`
+
 ## Version history
+
+### 1.01
+
+- Added automatic version manifest check (`version.json`) with cache-busting reload when a newer deployed version is detected.
+- Added cache-control meta hints to reduce stale page caching in browsers.
 
 ### 1.00
 
