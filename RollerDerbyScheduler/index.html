@@ -390,6 +390,13 @@
             <button id="clearBtn" class="ghost" type="button">Clear Generated Schedule</button>
           </div>
         </div>
+        <div class="flow" style="margin-top: 8px;">
+          <select id="lockMatch"></select>
+          <select id="lockRole"></select>
+          <select id="lockOfficial"></select>
+          <button id="addLockBtn" type="button">Lock Assignment</button>
+        </div>
+        <div id="lockedAssignmentsList" class="list"></div>
         <div id="status"></div>
         <div id="scheduleOutput" class="muted" style="margin-top: 10px;">No schedule generated yet.</div>
       </article>
@@ -403,6 +410,7 @@
       roles: [],
       matches: [],
       officials: [],
+      lockedAssignments: [],
       generated: null
     };
 
@@ -441,6 +449,11 @@
       scheduleDay: document.getElementById("scheduleDay"),
       generateBtn: document.getElementById("generateBtn"),
       copyScheduleBtn: document.getElementById("copyScheduleBtn"),
+      lockMatch: document.getElementById("lockMatch"),
+      lockRole: document.getElementById("lockRole"),
+      lockOfficial: document.getElementById("lockOfficial"),
+      addLockBtn: document.getElementById("addLockBtn"),
+      lockedAssignmentsList: document.getElementById("lockedAssignmentsList"),
       clearBtn: document.getElementById("clearBtn"),
       status: document.getElementById("status"),
       scheduleOutput: document.getElementById("scheduleOutput")
@@ -533,6 +546,15 @@
       }));
     }
 
+    function normalizeLockedAssignments(items) {
+      return (Array.isArray(items) ? items : []).map((item) => ({
+        id: item.id || uid("lock"),
+        matchId: item.matchId || "",
+        roleId: item.roleId || "",
+        officialId: item.officialId || ""
+      })).filter((item) => item.matchId && item.roleId && item.officialId);
+    }
+
     function loadState() {
       const rawV3 = localStorage.getItem(STORAGE_KEY);
       if (rawV3) {
@@ -541,6 +563,7 @@
           state.roles = Array.isArray(parsed.roles) ? parsed.roles : [];
           state.matches = Array.isArray(parsed.matches) ? parsed.matches : [];
           state.officials = normalizeOfficials(parsed.officials);
+          state.lockedAssignments = normalizeLockedAssignments(parsed.lockedAssignments);
           state.generated = parsed.generated || null;
         } catch (err) {
           console.error("Invalid v3 local storage state", err);
@@ -596,6 +619,9 @@
       if (!Array.isArray(state.officials)) {
         state.officials = [];
       }
+      if (!Array.isArray(state.lockedAssignments)) {
+        state.lockedAssignments = [];
+      }
       state.matches = state.matches.map((m) => ({
         id: m.id || uid("match"),
         name: m.name || "Unnamed match",
@@ -603,6 +629,7 @@
         time: m.time || ""
       }));
       state.officials = normalizeOfficials(state.officials);
+      state.lockedAssignments = normalizeLockedAssignments(state.lockedAssignments);
       state.roles = state.roles.map((r) => ({
         id: r.id || uid("role"),
         name: r.name || "Unnamed role",
@@ -668,6 +695,7 @@
               ...official,
               unavailable: (official.unavailable || []).filter((matchId) => matchId !== match.id)
             }));
+            state.lockedAssignments = state.lockedAssignments.filter((lock) => lock.matchId !== match.id);
             invalidateGenerated();
             saveState();
             renderAll();
@@ -810,6 +838,7 @@
             roles: (official.roles || []).filter((roleId) => roleId !== role.id),
             preferredRoleId: official.preferredRoleId === role.id ? "" : official.preferredRoleId
           }));
+          state.lockedAssignments = state.lockedAssignments.filter((lock) => lock.roleId !== role.id);
           if (ui.editingOfficialId) {
             clearOfficialForm();
           }
@@ -897,6 +926,7 @@
         delBtn.textContent = "Delete";
         delBtn.addEventListener("click", () => {
           state.officials = state.officials.filter((o) => o.id !== official.id);
+          state.lockedAssignments = state.lockedAssignments.filter((lock) => lock.officialId !== official.id);
           if (ui.editingOfficialId === official.id) {
             clearOfficialForm();
           }
@@ -1057,6 +1087,153 @@
       }
     }
 
+    function renderLockedAssignments() {
+      const orderedMatches = [...state.matches].sort(byMatchOrder);
+
+      el.lockMatch.innerHTML = "";
+      if (orderedMatches.length === 0) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "No matches";
+        el.lockMatch.appendChild(opt);
+      } else {
+        orderedMatches.forEach((match) => {
+          const opt = document.createElement("option");
+          opt.value = match.id;
+          opt.textContent = formatMatchLabel(match);
+          el.lockMatch.appendChild(opt);
+        });
+      }
+
+      el.lockRole.innerHTML = "";
+      if (state.roles.length === 0) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "No roles";
+        el.lockRole.appendChild(opt);
+      } else {
+        state.roles.forEach((role) => {
+          const opt = document.createElement("option");
+          opt.value = role.id;
+          opt.textContent = getRoleLabel(role);
+          el.lockRole.appendChild(opt);
+        });
+      }
+
+      el.lockOfficial.innerHTML = "";
+      if (state.officials.length === 0) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "No officials";
+        el.lockOfficial.appendChild(opt);
+      } else {
+        state.officials.forEach((official) => {
+          const opt = document.createElement("option");
+          opt.value = official.id;
+          opt.textContent = official.name;
+          el.lockOfficial.appendChild(opt);
+        });
+      }
+
+      el.addLockBtn.disabled = !(orderedMatches.length && state.roles.length && state.officials.length);
+
+      el.lockedAssignmentsList.innerHTML = "";
+      if (state.lockedAssignments.length === 0) {
+        el.lockedAssignmentsList.innerHTML = '<div class="item muted">No locked assignments yet.</div>';
+        return;
+      }
+
+      const sortedLocks = [...state.lockedAssignments].sort((a, b) => {
+        const ma = state.matches.find((m) => m.id === a.matchId);
+        const mb = state.matches.find((m) => m.id === b.matchId);
+        if (ma && mb) {
+          const cmp = byMatchOrder(ma, mb);
+          if (cmp !== 0) {
+            return cmp;
+          }
+        }
+        return getRoleName(a.roleId).localeCompare(getRoleName(b.roleId));
+      });
+
+      sortedLocks.forEach((lock) => {
+        const row = document.createElement("div");
+        row.className = "item";
+        const officialName = state.officials.find((o) => o.id === lock.officialId)?.name || "Unknown official";
+        const left = document.createElement("div");
+        left.innerHTML =
+          '<strong>' + escapeHtml(getMatchName(lock.matchId)) + '</strong><br>' +
+          '<span class="muted">' + escapeHtml(getRoleName(lock.roleId)) + " -> " + escapeHtml(officialName) + '</span>';
+
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "danger";
+        removeBtn.textContent = "Remove Lock";
+        removeBtn.addEventListener("click", () => {
+          state.lockedAssignments = state.lockedAssignments.filter((x) => x.id !== lock.id);
+          invalidateGenerated();
+          saveState();
+          renderAll();
+        });
+
+        row.appendChild(left);
+        row.appendChild(removeBtn);
+        el.lockedAssignmentsList.appendChild(row);
+      });
+    }
+
+    function addLockedAssignment() {
+      const matchId = el.lockMatch.value;
+      const roleId = el.lockRole.value;
+      const officialId = el.lockOfficial.value;
+
+      if (!matchId || !roleId || !officialId) {
+        setError("Select match, role, and official to lock an assignment.");
+        return;
+      }
+
+      const official = state.officials.find((o) => o.id === officialId);
+      const role = state.roles.find((r) => r.id === roleId);
+      if (!official || !role) {
+        setError("Selected lock target is no longer valid.");
+        return;
+      }
+      if (!(official.roles || []).includes(roleId)) {
+        setError("Official cannot perform the selected role.");
+        return;
+      }
+      if ((official.unavailable || []).includes(matchId)) {
+        setError("Official is marked unavailable for that match.");
+        return;
+      }
+
+      const sameOfficialDifferentRole = state.lockedAssignments.some((lock) => {
+        return lock.matchId === matchId && lock.officialId === officialId && lock.roleId !== roleId;
+      });
+      if (sameOfficialDifferentRole) {
+        setError("That official is already locked to another role in the same match.");
+        return;
+      }
+
+      const existingForRole = state.lockedAssignments.filter((lock) => lock.matchId === matchId && lock.roleId === roleId);
+      if (existingForRole.length >= role.count) {
+        setError("All slots for that role in this match are already locked.");
+        return;
+      }
+
+      const duplicateExact = existingForRole.some((lock) => lock.officialId === officialId);
+      if (duplicateExact) {
+        setError("That exact lock already exists.");
+        return;
+      }
+
+      state.lockedAssignments.push({ id: uid("lock"), matchId, roleId, officialId });
+      invalidateGenerated();
+      saveState();
+      resetStatus();
+      renderAll();
+      setOk("Locked assignment saved.");
+    }
+
     function getDayOverview() {
       const days = getUniqueDays();
       return days.map((day) => {
@@ -1128,6 +1305,7 @@
           roles: state.roles,
           matches: state.matches,
           officials: state.officials,
+          lockedAssignments: state.lockedAssignments,
           generated: state.generated
         }
       };
@@ -1175,6 +1353,7 @@
           time: m.time || ""
         })),
         officials: normalizeOfficials(data.officials),
+        lockedAssignments: normalizeLockedAssignments(data.lockedAssignments),
         generated: data.generated || null
       };
     }
@@ -1194,6 +1373,7 @@
       state.roles = next.roles;
       state.matches = next.matches;
       state.officials = next.officials;
+      state.lockedAssignments = next.lockedAssignments;
       state.generated = next.generated;
 
       if (state.roles.length === 0) {
@@ -1216,6 +1396,7 @@
         loadOfficialIntoForm(ui.editingOfficialId);
       }
       renderOfficials();
+      renderLockedAssignments();
       renderOverview();
       renderSchedule();
     }
@@ -1261,6 +1442,7 @@
         ...official,
         unavailable: []
       }));
+      state.lockedAssignments = [];
       invalidateGenerated();
       saveState();
       resetStatus();
@@ -1277,6 +1459,7 @@
         return;
       }
       state.officials = [];
+      state.lockedAssignments = [];
       clearOfficialForm();
       invalidateGenerated();
       saveState();
@@ -1293,6 +1476,7 @@
       state.roles = defaultRoles();
       state.matches = [];
       state.officials = [];
+      state.lockedAssignments = [];
       state.generated = null;
 
       clearOfficialForm();
@@ -1472,6 +1656,46 @@
         return;
       }
 
+      const dayMatchIds = new Set(matches.map((m) => m.id));
+      const dayLocked = state.lockedAssignments.filter((lock) => dayMatchIds.has(lock.matchId));
+
+      const roleMap = new Map(state.roles.map((r) => [r.id, r]));
+      const officialMap = new Map(state.officials.map((o) => [o.id, o]));
+
+      const lockCountByRoleMatch = new Map();
+      const lockByMatchOfficial = new Set();
+      for (const lock of dayLocked) {
+        const role = roleMap.get(lock.roleId);
+        const official = officialMap.get(lock.officialId);
+        if (!role || !official) {
+          setError("A locked assignment references a missing role or official.");
+          return;
+        }
+        if (!(official.roles || []).includes(lock.roleId)) {
+          setError("Locked assignment invalid: " + official.name + " cannot perform " + role.name + ".");
+          return;
+        }
+        if ((official.unavailable || []).includes(lock.matchId)) {
+          setError("Locked assignment invalid: " + official.name + " is unavailable for " + getMatchName(lock.matchId) + ".");
+          return;
+        }
+
+        const pairKey = lock.matchId + "::" + lock.roleId;
+        const pairCount = (lockCountByRoleMatch.get(pairKey) || 0) + 1;
+        lockCountByRoleMatch.set(pairKey, pairCount);
+        if (pairCount > role.count) {
+          setError("Too many locked assignments for role " + role.name + " in " + getMatchName(lock.matchId) + ".");
+          return;
+        }
+
+        const matchOfficialKey = lock.matchId + "::" + lock.officialId;
+        if (lockByMatchOfficial.has(matchOfficialKey)) {
+          setError("Locked assignments conflict: same official is locked to multiple roles in one match.");
+          return;
+        }
+        lockByMatchOfficial.add(matchOfficialKey);
+      }
+
       const slots = generateSlots(matches, state.roles);
       const slotCandidates = new Map();
 
@@ -1494,42 +1718,104 @@
       const assignments = new Map();
       const totalLoad = new Map(state.officials.map((o) => [o.id, 0]));
       const usedPerMatch = new Map(matches.map((m) => [m.id, new Set()]));
-      const officialMap = new Map(state.officials.map((o) => [o.id, o]));
+      const matchIndexById = new Map(matches.map((m, idx) => [m.id, idx]));
+      const assignedMatchIndexes = new Map(state.officials.map((o) => [o.id, new Set()]));
+
+      const slotsByRoleMatch = new Map();
+      slots.forEach((slot) => {
+        const key = slot.matchId + "::" + slot.roleId;
+        if (!slotsByRoleMatch.has(key)) {
+          slotsByRoleMatch.set(key, []);
+        }
+        slotsByRoleMatch.get(key).push(slot);
+      });
+
+      for (const lock of dayLocked) {
+        const key = lock.matchId + "::" + lock.roleId;
+        const availableSlots = slotsByRoleMatch.get(key) || [];
+        const slot = availableSlots.find((s) => !assignments.has(s.key));
+        if (!slot) {
+          setError("Unable to place a locked assignment for " + getRoleName(lock.roleId) + " in " + getMatchName(lock.matchId) + ".");
+          return;
+        }
+
+        assignments.set(slot.key, lock.officialId);
+        usedPerMatch.get(slot.matchId).add(lock.officialId);
+        totalLoad.set(lock.officialId, totalLoad.get(lock.officialId) + 1);
+        assignedMatchIndexes.get(lock.officialId).add(matchIndexById.get(slot.matchId));
+      }
+
+      const unlockedSlots = remaining.filter((slot) => !assignments.has(slot.key));
       let solved = false;
 
+      function getBreakPenalty(officialId, matchId) {
+        const targetIndex = matchIndexById.get(matchId);
+        const assigned = assignedMatchIndexes.get(officialId);
+        if (!assigned || assigned.size === 0) {
+          return 0;
+        }
+        let penalty = 0;
+        assigned.forEach((idx) => {
+          const d = Math.abs(idx - targetIndex);
+          if (d === 1) {
+            penalty += 100;
+          } else if (d === 2) {
+            penalty += 10;
+          }
+        });
+        return penalty;
+      }
+
       function backtrack(index) {
-        if (index >= remaining.length) {
+        if (index >= unlockedSlots.length) {
           solved = true;
           return true;
         }
 
-        const slot = remaining[index];
+        const slot = unlockedSlots[index];
         const usedSet = usedPerMatch.get(slot.matchId);
-        const orderedCandidates = [...slotCandidates.get(slot.key)]
+        const candidateMeta = [...slotCandidates.get(slot.key)]
           .filter((officialId) => !usedSet.has(officialId))
-          .sort((a, b) => {
-            const officialA = officialMap.get(a);
-            const officialB = officialMap.get(b);
-            const prefA = officialA?.preferredRoleId === slot.roleId ? 0 : 1;
-            const prefB = officialB?.preferredRoleId === slot.roleId ? 0 : 1;
-            if (prefA !== prefB) {
-              return prefA - prefB;
-            }
-
-            const loadDiff = totalLoad.get(a) - totalLoad.get(b);
-            if (loadDiff !== 0) {
-              return loadDiff;
-            }
-
-            const nameA = officialA?.name || "";
-            const nameB = officialB?.name || "";
-            return nameA.localeCompare(nameB);
+          .map((officialId) => {
+            const official = officialMap.get(officialId);
+            return {
+              officialId,
+              breakPenalty: getBreakPenalty(officialId, slot.matchId),
+              load: totalLoad.get(officialId),
+              preferredPenalty: official?.preferredRoleId === slot.roleId ? 0 : 1,
+              name: official?.name || ""
+            };
           });
+
+        if (candidateMeta.length === 0) {
+          return false;
+        }
+
+        const zeroBreakExists = candidateMeta.some((c) => c.breakPenalty === 0);
+        const filteredMeta = zeroBreakExists
+          ? candidateMeta.filter((c) => c.breakPenalty === 0)
+          : candidateMeta;
+
+        filteredMeta.sort((a, b) => {
+          if (a.breakPenalty !== b.breakPenalty) {
+            return a.breakPenalty - b.breakPenalty;
+          }
+          if (a.load !== b.load) {
+            return a.load - b.load;
+          }
+          if (a.preferredPenalty !== b.preferredPenalty) {
+            return a.preferredPenalty - b.preferredPenalty;
+          }
+          return a.name.localeCompare(b.name);
+        });
+
+        const orderedCandidates = filteredMeta.map((c) => c.officialId);
 
         for (const officialId of orderedCandidates) {
           assignments.set(slot.key, officialId);
           usedSet.add(officialId);
           totalLoad.set(officialId, totalLoad.get(officialId) + 1);
+          assignedMatchIndexes.get(officialId).add(matchIndexById.get(slot.matchId));
 
           if (backtrack(index + 1)) {
             return true;
@@ -1538,6 +1824,7 @@
           assignments.delete(slot.key);
           usedSet.delete(officialId);
           totalLoad.set(officialId, totalLoad.get(officialId) - 1);
+          assignedMatchIndexes.get(officialId).delete(matchIndexById.get(slot.matchId));
         }
 
         return false;
@@ -1595,6 +1882,7 @@
     el.generateDemoOfficialsBtn.addEventListener("click", generateDemoOfficials);
     el.resetDefaultsBtn.addEventListener("click", resetToDefaultSettings);
     el.copyScheduleBtn.addEventListener("click", copyScheduleForExcel);
+    el.addLockBtn.addEventListener("click", addLockedAssignment);
     el.importFile.addEventListener("change", async (event) => {
       const file = event.target.files && event.target.files[0];
       if (!file) {
