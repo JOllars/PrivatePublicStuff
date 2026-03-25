@@ -450,8 +450,8 @@
       </article>
 
       <article class="card">
-        <h2>4) Day Overview (Staffing Feel)</h2>
-        <p class="muted">Quick estimate of staffing pressure per day. Shortage is an estimate to help you spot risky days before generation.</p>
+        <h2>4) Day Overview (Role Coverage by Game)</h2>
+        <p class="muted">Each day is shown as its own table. Rows are games, role columns use short names, and values show how many officials can perform each role in that game.</p>
         <div id="overviewOutput" class="muted">No match days yet.</div>
       </article>
 
@@ -479,7 +479,7 @@
   </main>
 
   <script>
-    const APP_VERSION = "1.04";
+    const APP_VERSION = "1.05";
     const STORAGE_KEY = "rollerderby-official-scheduler-v3";
 
     const DEMO_FIRST_NAMES = [
@@ -704,6 +704,7 @@
     function defaultRoles() {
       return [
         { id: uid("role"), name: "Head Ref", shortName: "HR", count: 1 },
+        { id: uid("role"), name: "Head NSO", shortName: "HNSO", count: 1 },
         { id: uid("role"), name: "Outside Pack Ref", shortName: "OPR", count: 3 },
         { id: uid("role"), name: "Jammer Ref", shortName: "JR", count: 2 },
         { id: uid("role"), name: "Inside Pack Ref", shortName: "IPR", count: 1 },
@@ -730,6 +731,11 @@
     }
 
     function getScheduleRoleShortLabel(role) {
+      const short = sanitizeShortName(role.shortName || "");
+      return short || " ";
+    }
+
+    function getRoleShortOnly(role) {
       const short = sanitizeShortName(role.shortName || "");
       return short || " ";
     }
@@ -1558,63 +1564,61 @@
     function getDayOverview() {
       const days = getUniqueDays();
       return days.map((day) => {
-        const dayMatches = state.matches.filter((m) => m.date === day);
-        const slotsPerMatch = state.roles.reduce((sum, role) => sum + role.count, 0);
-        const requiredSlots = dayMatches.length * slotsPerMatch;
-
-        let capacity = 0;
-        let directDeficit = 0;
-
-        dayMatches.forEach((match) => {
-          const availableForAny = state.officials.filter((official) => {
-            const hasAnyRole = (official.roles || []).some((roleId) => state.roles.some((r) => r.id === roleId));
-            const unavailable = (official.unavailable || []).includes(match.id);
-            return hasAnyRole && !unavailable;
-          }).length;
-
-          capacity += Math.min(slotsPerMatch, availableForAny);
+        const dayMatches = state.matches.filter((m) => m.date === day).sort(byMatchOrder);
+        const games = dayMatches.map((match) => {
+          const roleCounts = {};
 
           state.roles.forEach((role) => {
-            const candidates = state.officials.filter((official) => {
+            roleCounts[role.id] = state.officials.filter((official) => {
               return (official.roles || []).includes(role.id) && !(official.unavailable || []).includes(match.id);
             }).length;
-            directDeficit += Math.max(0, role.count - candidates);
           });
-        });
 
-        const estimatedShortage = Math.max(0, requiredSlots - capacity, directDeficit);
+          const totalAvailable = state.officials.filter((official) => {
+            return !(official.unavailable || []).includes(match.id);
+          }).length;
+
+          return {
+            matchId: match.id,
+            matchLabel: (match.time ? match.time + " - " : "") + match.name,
+            roleCounts,
+            totalAvailable
+          };
+        });
 
         return {
           day,
-          matches: dayMatches.length,
-          requiredSlots,
-          estimatedCapacity: capacity,
-          estimatedShortage
+          games
         };
       });
     }
 
     function renderOverview() {
-      const rows = getDayOverview();
-      if (rows.length === 0) {
+      const days = getDayOverview();
+      if (days.length === 0) {
         el.overviewOutput.innerHTML = '<p class="muted">No match days yet.</p>';
         return;
       }
 
-      let html = "<table><thead><tr><th>Day</th><th>Games</th><th>Matches</th><th>Required Slots</th><th>Est. Capacity</th><th>Est. Shortage</th><th>Status</th></tr></thead><tbody>";
-      rows.forEach((row) => {
-        const dayMatches = state.matches
-          .filter((m) => m.date === row.day)
-          .sort(byMatchOrder)
-          .map((m) => (m.time ? m.time + " - " : "") + m.name)
-          .map((label) => "<div>" + escapeHtml(label) + "</div>")
-          .join("");
-        const status = row.estimatedShortage > 0 ? "Tight" : "Healthy";
-        const cls = row.estimatedShortage > 0 ? "overview-warn" : "overview-ok";
-        html +=
-          "<tr><td>" + escapeHtml(row.day) + "</td><td>" + (dayMatches || "-") + "</td><td>" + row.matches + "</td><td>" + row.requiredSlots + "</td><td>" + row.estimatedCapacity + "</td><td>" + row.estimatedShortage + "</td><td><span class=\"" + cls + "\">" + status + "</span></td></tr>";
+      let html = "";
+      days.forEach((dayBlock) => {
+        html += '<h3 style="margin: 12px 0 6px;">' + escapeHtml(dayBlock.day) + "</h3>";
+        html += "<table><thead><tr><th>Game</th>";
+        state.roles.forEach((role) => {
+          html += "<th>" + escapeHtml(getRoleShortOnly(role)) + "</th>";
+        });
+        html += "<th>Total Available</th></tr></thead><tbody>";
+
+        dayBlock.games.forEach((game) => {
+          html += "<tr><td>" + escapeHtml(game.matchLabel) + "</td>";
+          state.roles.forEach((role) => {
+            html += "<td>" + game.roleCounts[role.id] + "</td>";
+          });
+          html += "<td>" + game.totalAvailable + "</td></tr>";
+        });
+
+        html += "</tbody></table>";
       });
-      html += "</tbody></table>";
       el.overviewOutput.innerHTML = html;
     }
 

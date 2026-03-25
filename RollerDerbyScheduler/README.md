@@ -4,7 +4,7 @@ A standalone browser-based scheduler for flat track roller derby officiating.
 
 ## Versioning
 
-- Current version: `1.04`
+- Current version: `1.05`
 - Default increment rule: increase by `0.01` for each update unless explicitly requested otherwise.
 - Keep this README updated with a per-version changelog entry whenever features or behavior change.
 
@@ -14,6 +14,14 @@ Version files to update on each release:
 - `version.json` -> `version`
 
 ## Version history
+
+### 1.05
+
+- Reworked Day Overview into per-day visual tables.
+- In each day table, each game is a row.
+- Role columns now use role short names only, and each cell shows the count of officials who can perform that role for that specific game.
+- Added a final `Total Available` column showing how many officials are available for each game.
+- Added `Head NSO` as a standard default role with short name `HNSO`.
 
 ### 1.04
 
@@ -49,7 +57,7 @@ Version files to update on each release:
 
 - Lets you add matches with date and time.
 - Lets you generate schedules per selected day.
-- Includes a day overview to estimate staffing pressure and likely shortage per day.
+- Includes a day overview with per-day tables showing role coverage by game.
 - Uses one unified officials pool (Ref and NSO mixed as needed).
 - Lets you define one role list where roles can be Ref, NSO, or both.
 - Lets you edit role counts inline without recreating roles.
@@ -91,6 +99,7 @@ The app starts with these default roles when a new user opens it (or after Reset
 | Role | Short | Required per match |
 | --- | --- | --- |
 | Head Ref | HR | 1 |
+| Head NSO | HNSO | 1 |
 | Outside Pack Ref | OPR | 3 |
 | Jammer Ref | JR | 2 |
 | Inside Pack Ref | IPR | 1 |
